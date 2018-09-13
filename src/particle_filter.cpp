@@ -44,9 +44,10 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 		temp_particle.theta = sample_theta;
 		temp_particle.weight = 1.0;
 		particles.push_back(temp_particle);
-		cout<<particles[ii].id<<endl;
+		//cout<<particles[ii].id<<endl;
 	}
-is_initialized = true;
+	
+	is_initialized = true;
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate) {
@@ -54,7 +55,24 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	// NOTE: When adding noise you may find std::normal_distribution and std::default_random_engine useful.
 	//  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
 	//  http://www.cplusplus.com/reference/random/default_random_engine/
+	
+	default_random_engine gen;
+		
+	for (int ii = 0; ii < num_particles; ++ii){
+		double new_x = particles[ii].x + velocity / yaw_rate * (sin(particles[ii].theta + yaw_rate * delta_t) - sin(particles[ii].theta));
+		double new_y = particles[ii].y + velocity / yaw_rate * (cos(particles[ii].theta) - cos(particles[ii].theta + yaw_rate * delta_t));
+		double new_theta = particles[ii].theta + yaw_rate * delta_t;
+	
+		// Create the normal distributions
+		normal_distribution<double> dist_x(new_x, std_pos[0]);
+		normal_distribution<double> dist_y(new_y, std_pos[1]);
+		normal_distribution<double> dist_theta(new_theta, std_pos[2]);
 
+		// Sample from the normal distribution
+		particles[ii].x = dist_x(gen);
+		particles[ii].y = dist_y(gen);
+		particles[ii].theta = dist_theta(gen);
+	}
 }
 
 void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::vector<LandmarkObs>& observations) {
