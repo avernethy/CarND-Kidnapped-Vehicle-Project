@@ -25,7 +25,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	// Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
 	double sample_x, sample_y, sample_theta;
-	num_particles = 1000;
+	num_particles = 100;
 	default_random_engine gen;
 	Particle temp_particle;
 
@@ -80,6 +80,28 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 	//   observed measurement to this particular landmark.
 	// NOTE: this method will NOT be called by the grading code. But you will probably find it useful to 
 	//   implement this method and use it as a helper during the updateWeights phase.
+	double dist_min = 1000000;
+	//LandmarkObs associated;
+	//vector<LandmarkObs> associated_list;
+	for (unsigned int i=0; i < observations.size(); ++i){ // for each observation 
+		for(unsigned int j = 0; j < predicted.size(); ++j){ // find the associated label of the map
+			double distance;
+			distance =dist(observations[j].x,observations[j].y, predicted[i].x,predicted[i].y);  
+			//cout<<"dist: "<<dist<<endl;
+			if (distance < dist_min){
+				//ParticleFilter::SetAssociations();
+				dist_min = distance;
+				//cout<<"dist_min: "<<dist_min<<endl;
+				observations[i].id	 = predicted[i].id;
+				//associated.x = observations[j].x;
+				//associated.y = observations[j].y;
+				//associated_list.push_back(associated);
+			}
+		}
+		//cout<<"observations:  "<< observations[i].id<<endl;
+		//cout<<"predicted: "<< predicted[i].id<<endl;
+		
+	}
 
 }
 
@@ -95,6 +117,78 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//   and the following is a good resource for the actual equation to implement (look at equation 
 	//   3.33
 	//   http://planning.cs.uiuc.edu/node99.html
+	
+	
+	cout<<"observations size: "<<observations.size()<<endl;
+	for (unsigned int ii = 0; ii < particles.size(); ++ii){
+		
+		LandmarkObs obs_map;
+		LandmarkObs pred;
+		vector<LandmarkObs> obs_map_coords;
+		vector<LandmarkObs> predicted;
+		
+		for (unsigned int i = 0; i < map_landmarks.landmark_list.size(); ++i){
+			pred.id = map_landmarks.landmark_list[i].id_i;
+			pred.x = map_landmarks.landmark_list[i].x_f;
+			pred.y = map_landmarks.landmark_list[i].y_f;
+			double distance = dist(pred.x,pred.y,particles[ii].x,particles[ii].y);
+			if (distance < sensor_range){
+				predicted.push_back(pred);
+			}
+		}	
+		for (unsigned int jj = 0; jj < observations.size(); ++jj){
+			obs_map.id = observations[jj].id;
+			obs_map.x = particles[ii].x + observations[jj].x * cos(particles[ii].theta) - sin(particles[ii].theta) * observations[jj].y;
+			obs_map.y = particles[ii].y + observations[jj].x * sin(particles[ii].theta) + cos(particles[ii].theta) * observations[jj].y;
+			obs_map_coords.push_back(obs_map);
+			
+		}
+		//for( Unsigned int k=0;)
+		//cout<<"predicted size: "<<predicted.size()<<endl;
+		//cout<<"obs_map_coords size: "<<obs_map_coords.size()<<endl;	
+		//ParticleFilter::dataAssociation(predicted,obs_map_coords);	//mu_x, mu_y & x and y	
+			
+
+			
+		
+		double temp_weight = particles[ii].weight;
+		for (unsigned int k = 0; k < obs_map_coords.size(); ++k){
+			double x_obs_map = obs_map_coords[k].x;
+			double y_obs_map = obs_map_coords[k].y;
+			double dist_min = 10000000;
+			double temp;
+			for(unsigned int j = 0; j < predicted.size(); ++j){ // find the associated label of the map
+				double distance;
+				double mu_x;
+				double mu_y;
+				distance =dist(x_obs_map,y_obs_map, predicted[j].x,predicted[j].y);  
+				//cout<<"dist: "<<dist<<endl;
+				if (distance < dist_min){
+					obs_map_coords[k].id = predicted[j].id;
+					mu_x = predicted[j].x;
+					mu_y = predicted[j].y;
+					dist_min = distance;
+					//cout << "Dist Min " << dist_min << endl;
+					temp = 1/2.0/M_PI/std_landmark[0]/std_landmark[1]*exp(-((x_obs_map-mu_x)*(x_obs_map-mu_x)/2.0/std_landmark[0]/std_landmark[0]+(y_obs_map-mu_y)*(y_obs_map-mu_y)/2.0/std_landmark[1]/std_landmark[1]));  
+					//cout << "Weight [ "<<ii<<" ]["<<k<<"][ " << j << "] = " << temp << endl;
+				}
+			
+			}
+			temp_weight = temp_weight * temp;
+			particles[ii].weight = temp_weight;
+			//cout << "Weight [ "<<ii<<" ]["<<k<<"] = " << temp_weight << endl;
+			//double mu_x = 1;//get the predicted map with obs_map_coords[k].id
+			//double mu_y = 1;//get the same 
+			
+		}
+		
+		
+		
+	cout << "Weight [ "<<ii<<" ] = " << particles[ii].weight << endl;	
+
+
+	}
+	//ParticleFilter::dataAssociation(map_landmarks,observations);
 }
 
 void ParticleFilter::resample() {
