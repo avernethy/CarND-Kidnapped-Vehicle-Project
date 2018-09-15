@@ -118,84 +118,112 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//   3.33
 	//   http://planning.cs.uiuc.edu/node99.html
 	
-	
-	cout<<"observations size: "<<observations.size()<<endl;
+	double total_weight = 0;
+	vector<double> particle_weights;
+	//cout<<"observations size: "<<observations.size()<<endl;
 	for (unsigned int ii = 0; ii < particles.size(); ++ii){
 		
 		LandmarkObs obs_map;
 		LandmarkObs pred;
 		vector<LandmarkObs> obs_map_coords;
+		//vector for holding the map data around a particle
 		vector<LandmarkObs> predicted;
 		
+		//create a vector of landmarks in map coordinates. particles are in map coordinates
 		for (unsigned int i = 0; i < map_landmarks.landmark_list.size(); ++i){
 			pred.id = map_landmarks.landmark_list[i].id_i;
 			pred.x = map_landmarks.landmark_list[i].x_f;
 			pred.y = map_landmarks.landmark_list[i].y_f;
+
+			//calculate the distance from the particle to the map landmarks
 			double distance = dist(pred.x,pred.y,particles[ii].x,particles[ii].y);
+			//add the Map Landmark to the vector if within sensor range
 			if (distance < sensor_range){
 				predicted.push_back(pred);
 			}
 		}	
+
+		//transform car observations to map coordiates
 		for (unsigned int jj = 0; jj < observations.size(); ++jj){
 			obs_map.id = observations[jj].id;
 			obs_map.x = particles[ii].x + observations[jj].x * cos(particles[ii].theta) - sin(particles[ii].theta) * observations[jj].y;
 			obs_map.y = particles[ii].y + observations[jj].x * sin(particles[ii].theta) + cos(particles[ii].theta) * observations[jj].y;
 			obs_map_coords.push_back(obs_map);
-			
 		}
-		//for( Unsigned int k=0;)
-		//cout<<"predicted size: "<<predicted.size()<<endl;
-		//cout<<"obs_map_coords size: "<<obs_map_coords.size()<<endl;	
-		//ParticleFilter::dataAssociation(predicted,obs_map_coords);	//mu_x, mu_y & x and y	
-			
 
-			
-		
-		double temp_weight = particles[ii].weight;
+
+		double temp_weight = 1;//particle_weights[ii].weight;
+		//for each observation
 		for (unsigned int k = 0; k < obs_map_coords.size(); ++k){
 			double x_obs_map = obs_map_coords[k].x;
 			double y_obs_map = obs_map_coords[k].y;
 			double dist_min = 10000000;
-			double temp;
+			double weight_min = 1;
+			//check the landmark distance to the observation
 			for(unsigned int j = 0; j < predicted.size(); ++j){ // find the associated label of the map
 				double distance;
 				double mu_x;
 				double mu_y;
 				distance =dist(x_obs_map,y_obs_map, predicted[j].x,predicted[j].y);  
-				//cout<<"dist: "<<dist<<endl;
+				
+				//if the distance between the landmark and the observation smaller than the last landmark
 				if (distance < dist_min){
+					//assign the landmark id to the observation
 					obs_map_coords[k].id = predicted[j].id;
+					//assign the landmark location for calculating the multivariate gaussian probability
 					mu_x = predicted[j].x;
 					mu_y = predicted[j].y;
+					//make the current distance the min
 					dist_min = distance;
-					//cout << "Dist Min " << dist_min << endl;
-					temp = 1/2.0/M_PI/std_landmark[0]/std_landmark[1]*exp(-((x_obs_map-mu_x)*(x_obs_map-mu_x)/2.0/std_landmark[0]/std_landmark[0]+(y_obs_map-mu_y)*(y_obs_map-mu_y)/2.0/std_landmark[1]/std_landmark[1]));  
-					//cout << "Weight [ "<<ii<<" ]["<<k<<"][ " << j << "] = " << temp << endl;
+					//calculate the weight
+					weight_min = 1/2.0/M_PI/std_landmark[0]/std_landmark[1]*exp(-((x_obs_map-mu_x)*(x_obs_map-mu_x)/2.0/std_landmark[0]/std_landmark[0]+(y_obs_map-mu_y)*(y_obs_map-mu_y)/2.0/std_landmark[1]/std_landmark[1]));  
 				}
 			
-			}
-			temp_weight = temp_weight * temp;
-			particles[ii].weight = temp_weight;
-			//cout << "Weight [ "<<ii<<" ]["<<k<<"] = " << temp_weight << endl;
-			//double mu_x = 1;//get the predicted map with obs_map_coords[k].id
-			//double mu_y = 1;//get the same 
+			}//finish cycling thru the landmarks (we should have the smallest distance weight now)
+			//multiply the current particle weight by the weight of the kth observation made
+			temp_weight = temp_weight * weight_min;
 			
-		}
-		
-		
-		
-	cout << "Weight [ "<<ii<<" ] = " << particles[ii].weight << endl;	
-
-
+		}//finish checking all the observations
+		//assign the product of weights to the current particle weight
+		particle_weights.push_back(temp_weight);
+		total_weight+=temp_weight;
 	}
-	//ParticleFilter::dataAssociation(map_landmarks,observations);
+	//normalize the weights and update the particle weights
+	for(unsigned int i = 0; i < particle_weights.size(); ++i){
+		particles[i].weight = particle_weights[i] / total_weight;
+	}
 }
 
 void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight. 
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
-
+	uniform_int_distribution<int> ind_particles (1,num_particles);
+	default_random_engine gen;
+	unsigned int index = ind_particles(gen);//some random function here
+	double random_one = ((double) rand() / (RAND_MAX));
+	double beta = 0.0;
+	float mw = 0;
+	//get the largest weight
+	for(unsigned int i = 0; i < particles.size(); ++i){
+		if (particles[i].weight > mw){
+			mw = particles[i].weight;
+		}
+	}
+	vector<Particle> new_particles = particles;
+	for(int i = 0; i < num_particles; ++i){
+		beta+= 2.0 * mw * random_one;// some random number
+		//cout<<"beta: "<< beta<< endl;
+		//cout<<"particles [" <<i<< "]: "<< particles[i].weight << "\n" << endl;
+		while(beta > particles[index].weight){
+			beta-=particles[index].weight;
+			index = (index + 1) % num_particles;
+			//cout<<"index: "<<index<<endl;
+		}
+		new_particles[i] = particles[index];
+	}
+	//cout<<"test1"<<endl;
+	particles = new_particles;
 }
 
 Particle ParticleFilter::SetAssociations(Particle& particle, const std::vector<int>& associations, 
